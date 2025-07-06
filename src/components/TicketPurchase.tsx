@@ -18,28 +18,7 @@ export function TicketPurchase({ walletAddress, lotteryWallet, ticketPrice }: Ti
 
   const totalCost = ticketCount * ticketPrice;
 
-  const testConnection = async () => {
-    const endpoints = [
-      'https://mainnet.helius-rpc.com/?api-key=demo',
-      'https://api.mainnet-beta.solana.com',
-      'https://solana-api.projectserum.com',
-      'https://rpc.ankr.com/solana'
-    ];
-    
-    for (const endpoint of endpoints) {
-      try {
-        console.log(`Testing: ${endpoint}`);
-        const conn = new Connection(endpoint);
-        const slot = await conn.getSlot();
-        console.log(`✅ ${endpoint} - slot: ${slot}`);
-        toast.success(`Připojení OK: ${endpoint.split('//')[1].split('/')[0]}`);
-        return;
-      } catch (error) {
-        console.log(`❌ ${endpoint} - error:`, error);
-      }
-    }
-    toast.error("Žádný RPC endpoint nefunguje");
-  };
+
 
   const getProvider = () => {
     if ('phantom' in window) {
@@ -68,45 +47,15 @@ export function TicketPurchase({ walletAddress, lotteryWallet, ticketPrice }: Ti
       // Real Phantom wallet transaction on MAINNET
       console.log("Starting purchase process...");
       
-      // Use multiple RPC endpoints for better reliability
-      const rpcEndpoints = [
-        'https://mainnet.helius-rpc.com/?api-key=demo',
-        'https://api.mainnet-beta.solana.com',
-        'https://solana-api.projectserum.com',
-        'https://rpc.ankr.com/solana'
-      ];
+      // Use Helius RPC endpoint
+      const rpcEndpoint = 'https://mainnet.helius-rpc.com/?api-key=045f18e0-0dad-4b60-9b48-f7b677c989bc';
       
-      let connection: Connection | null = null;
-      let lastError: Error | null = null;
-      
-      // Try different RPC endpoints until one works
-      for (const endpoint of rpcEndpoints) {
-        try {
-          console.log(`Testing endpoint: ${endpoint}`);
-          const testConnection = new Connection(endpoint, {
-            commitment: 'confirmed',
-            confirmTransactionInitialTimeout: 60000,
-          });
-          
-          // Test with timeout
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout')), 10000)
-          );
-          
-          await Promise.race([testConnection.getSlot(), timeoutPromise]);
-          connection = testConnection;
-          console.log(`Connected to: ${endpoint}`);
-          break;
-        } catch (error) {
-          console.warn(`RPC endpoint ${endpoint} failed:`, error);
-          lastError = error as Error;
-          continue;
-        }
-      }
-      
-      if (!connection) {
-        throw new Error(`Všechny RPC endpointy selhaly. Zkus to za chvilku znovu. Chyba: ${lastError?.message || 'Neznámá chyba'}`);
-      }
+      console.log(`Connecting to Helius RPC...`);
+      const connection = new Connection(rpcEndpoint, {
+        commitment: 'confirmed',
+        confirmTransactionInitialTimeout: 60000,
+      });
+
       const fromPubkey = new PublicKey(walletAddress);
       const toPubkey = new PublicKey(lotteryWallet);
       
@@ -266,14 +215,6 @@ export function TicketPurchase({ walletAddress, lotteryWallet, ticketPrice }: Ti
             {lotteryWallet}
           </div>
         </div>
-
-        {/* Test Connection Button */}
-        <button
-          onClick={testConnection}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition-colors mb-2"
-        >
-          🔧 Test RPC Connection
-        </button>
 
         {/* Purchase Button */}
         <button
