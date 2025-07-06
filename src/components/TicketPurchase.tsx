@@ -18,6 +18,29 @@ export function TicketPurchase({ walletAddress, lotteryWallet, ticketPrice }: Ti
 
   const totalCost = ticketCount * ticketPrice;
 
+  const testConnection = async () => {
+    const endpoints = [
+      'https://mainnet.helius-rpc.com/?api-key=demo',
+      'https://api.mainnet-beta.solana.com',
+      'https://solana-api.projectserum.com',
+      'https://rpc.ankr.com/solana'
+    ];
+    
+    for (const endpoint of endpoints) {
+      try {
+        console.log(`Testing: ${endpoint}`);
+        const conn = new Connection(endpoint);
+        const slot = await conn.getSlot();
+        console.log(`✅ ${endpoint} - slot: ${slot}`);
+        toast.success(`Připojení OK: ${endpoint.split('//')[1].split('/')[0]}`);
+        return;
+      } catch (error) {
+        console.log(`❌ ${endpoint} - error:`, error);
+      }
+    }
+    toast.error("Žádný RPC endpoint nefunguje");
+  };
+
   const getProvider = () => {
     if ('phantom' in window) {
       const provider = (window as any).phantom?.solana;
@@ -47,9 +70,10 @@ export function TicketPurchase({ walletAddress, lotteryWallet, ticketPrice }: Ti
       
       // Use multiple RPC endpoints for better reliability
       const rpcEndpoints = [
+        'https://mainnet.helius-rpc.com/?api-key=demo',
+        'https://api.mainnet-beta.solana.com',
         'https://solana-api.projectserum.com',
-        'https://rpc.ankr.com/solana',
-        'https://api.mainnet-beta.solana.com'
+        'https://rpc.ankr.com/solana'
       ];
       
       let connection: Connection | null = null;
@@ -58,10 +82,20 @@ export function TicketPurchase({ walletAddress, lotteryWallet, ticketPrice }: Ti
       // Try different RPC endpoints until one works
       for (const endpoint of rpcEndpoints) {
         try {
-          const testConnection = new Connection(endpoint);
-          // Test the connection with a simple call
-          await testConnection.getSlot();
+          console.log(`Testing endpoint: ${endpoint}`);
+          const testConnection = new Connection(endpoint, {
+            commitment: 'confirmed',
+            confirmTransactionInitialTimeout: 60000,
+          });
+          
+          // Test with timeout
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout')), 10000)
+          );
+          
+          await Promise.race([testConnection.getSlot(), timeoutPromise]);
           connection = testConnection;
+          console.log(`Connected to: ${endpoint}`);
           break;
         } catch (error) {
           console.warn(`RPC endpoint ${endpoint} failed:`, error);
@@ -71,7 +105,7 @@ export function TicketPurchase({ walletAddress, lotteryWallet, ticketPrice }: Ti
       }
       
       if (!connection) {
-        throw new Error(`All RPC endpoints failed. Last error: ${lastError?.message || 'Unknown error'}`);
+        throw new Error(`Všechny RPC endpointy selhaly. Zkus to za chvilku znovu. Chyba: ${lastError?.message || 'Neznámá chyba'}`);
       }
       const fromPubkey = new PublicKey(walletAddress);
       const toPubkey = new PublicKey(lotteryWallet);
@@ -146,9 +180,9 @@ export function TicketPurchase({ walletAddress, lotteryWallet, ticketPrice }: Ti
       } else if (error.message?.includes('Transaction already processed')) {
         toast.error("This transaction was already processed.");
       } else if (error.message?.includes('403') || error.message?.includes('Access forbidden')) {
-        toast.error("RPC access error. Please try again in a moment.");
-      } else if (error.message?.includes('RPC') || error.message?.includes('endpoints failed')) {
-        toast.error("Network connectivity issues. Please try again later.");
+        toast.error("RPC přístup blokován. Zkus to za chvilku znovu.");
+      } else if (error.message?.includes('RPC') || error.message?.includes('endpoints failed') || error.message?.includes('selhaly')) {
+        toast.error("Problém s připojením k Solana síti. Zkus to později.");
       } else {
         toast.error(`Transaction failed: ${error.message || 'Please try again'}`);
       }
@@ -233,6 +267,14 @@ export function TicketPurchase({ walletAddress, lotteryWallet, ticketPrice }: Ti
           </div>
         </div>
 
+        {/* Test Connection Button */}
+        <button
+          onClick={testConnection}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition-colors mb-2"
+        >
+          🔧 Test RPC Connection
+        </button>
+
         {/* Purchase Button */}
         <button
           onClick={handlePurchase}
@@ -255,7 +297,7 @@ export function TicketPurchase({ walletAddress, lotteryWallet, ticketPrice }: Ti
             Make sure you have sufficient SOL balance before purchasing tickets
           </div>
           <div className="text-yellow-400 text-xs mt-2">
-            If you encounter RPC errors, please wait a moment and try again
+            Pokud se objeví RPC chyby, počkej chvilku a zkus to znovu
           </div>
         </div>
       </div>
