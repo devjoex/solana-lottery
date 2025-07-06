@@ -45,8 +45,34 @@ export function TicketPurchase({ walletAddress, lotteryWallet, ticketPrice }: Ti
       // Real Phantom wallet transaction on MAINNET
       console.log("Starting purchase process...");
       
-      // Use reliable RPC endpoint for mainnet
-      const connection = new Connection('https://api.mainnet-beta.solana.com');
+      // Use multiple RPC endpoints for better reliability
+      const rpcEndpoints = [
+        'https://solana-api.projectserum.com',
+        'https://rpc.ankr.com/solana',
+        'https://api.mainnet-beta.solana.com'
+      ];
+      
+      let connection: Connection | null = null;
+      let lastError: Error | null = null;
+      
+      // Try different RPC endpoints until one works
+      for (const endpoint of rpcEndpoints) {
+        try {
+          const testConnection = new Connection(endpoint);
+          // Test the connection with a simple call
+          await testConnection.getSlot();
+          connection = testConnection;
+          break;
+        } catch (error) {
+          console.warn(`RPC endpoint ${endpoint} failed:`, error);
+          lastError = error as Error;
+          continue;
+        }
+      }
+      
+      if (!connection) {
+        throw new Error(`All RPC endpoints failed. Last error: ${lastError?.message || 'Unknown error'}`);
+      }
       const fromPubkey = new PublicKey(walletAddress);
       const toPubkey = new PublicKey(lotteryWallet);
       
@@ -60,8 +86,15 @@ export function TicketPurchase({ walletAddress, lotteryWallet, ticketPrice }: Ti
       
       console.log("Checking wallet balance...");
       
-      // Check wallet balance first
-      const balance = await connection.getBalance(fromPubkey);
+      // Check wallet balance first with retry logic
+      let balance: number;
+      try {
+        balance = await connection.getBalance(fromPubkey);
+      } catch (error) {
+        console.warn("Failed to get balance, retrying...", error);
+        const accountInfo = await connection.getAccountInfo(fromPubkey);
+        balance = accountInfo?.lamports || 0;
+      }
       const requiredLamports = Math.floor(totalCost * LAMPORTS_PER_SOL) + 10000; // Add fee buffer
       
       console.log(`Balance: ${balance}, Required: ${requiredLamports}`);
@@ -112,6 +145,10 @@ export function TicketPurchase({ walletAddress, lotteryWallet, ticketPrice }: Ti
         toast.error("Network error. Please check your connection and try again.");
       } else if (error.message?.includes('Transaction already processed')) {
         toast.error("This transaction was already processed.");
+      } else if (error.message?.includes('403') || error.message?.includes('Access forbidden')) {
+        toast.error("RPC access error. Please try again in a moment.");
+      } else if (error.message?.includes('RPC') || error.message?.includes('endpoints failed')) {
+        toast.error("Network connectivity issues. Please try again later.");
       } else {
         toast.error(`Transaction failed: ${error.message || 'Please try again'}`);
       }
@@ -216,6 +253,9 @@ export function TicketPurchase({ walletAddress, lotteryWallet, ticketPrice }: Ti
           <div>⚠️ <strong>MAINNET TRANSACTIONS</strong> - Real SOL will be used!</div>
           <div className="text-red-400">
             Make sure you have sufficient SOL balance before purchasing tickets
+          </div>
+          <div className="text-yellow-400 text-xs mt-2">
+            If you encounter RPC errors, please wait a moment and try again
           </div>
         </div>
       </div>
